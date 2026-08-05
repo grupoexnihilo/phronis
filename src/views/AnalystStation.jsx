@@ -56,27 +56,27 @@ export default function AnalystStation({ user: propUser }) {
     }, [currentUserId]);
 
     // --- Adicione esta função para limpar/preparar os dados ---
+// Substitua a função prepareAndOpenReport dentro de src/views/AnalystStation.jsx
+
 const prepareAndOpenReport = (item) => {
-    // 1. Pega o dado (seja do item direto ou de dentro de aiSummary)
     let rawData = item.aiSummary || item;
 
-    // 2. Se for string, transforma em objeto. Se já for objeto, usa ele mesmo.
     let parsedData;
     try {
         parsedData = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
     } catch (e) {
         console.error("Erro ao converter JSON:", e);
-        parsedData = {}; // Fallback de segurança
+        parsedData = {};
     }
 
-    // 3. Adapter: Garante o formato esperado pelo ReportModal
+    // 💡 ADAPTER COMPATÍVEL: Lê tanto a estrutura nova quanto o schema legado do banco
     const cleanData = {
-        acaoSugerida: parsedData.acaoSugerida || item.acaoSugerida || "N/A",
-        temperaturaSaude: parsedData.temperaturaSaude || item.temperaturaSaude || "N/A",
-        resumo: parsedData.resumo || "Resumo não disponível.",
-        estrategia: parsedData.estrategia || "Estratégia não disponível.",
-        projecao: parsedData.projecao || "Projeção não disponível.",
-        riscos: parsedData.riscos || "Riscos não disponíveis."
+        acaoSugerida: parsedData.acaoSugerida || (parsedData.winRate && parseInt(parsedData.winRate) >= 65 ? "COMPRA" : "AGUARDAR") || "N/A",
+        temperaturaSaude: parsedData.temperaturaSaude || (parsedData.winRate ? `${parsedData.winRate}%` : "N/A"),
+        resumo: parsedData.resumo || parsedData.technicalSummary || "Resumo não disponível.",
+        estrategia: parsedData.estrategia || parsedData.strategy || "Estratégia não disponível.",
+        projecao: parsedData.projecao || (parsedData.targetPrice ? `Entrada: R$ ${parsedData.entryPrice || '--'} | Alvo: R$ ${parsedData.targetPrice}` : "Projeção não disponível."),
+        riscos: parsedData.riscos || (parsedData.stopPrice ? `Stop Loss fixado em R$ ${parsedData.stopPrice}` : "Riscos não disponíveis.")
     };
 
     setActiveModalData(cleanData);

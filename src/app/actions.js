@@ -685,51 +685,74 @@ async function processarValidacaoBackground(jobId, params) {
     try {
         const { symbol, currentPrice, entryPrice, targetPrice, stopPrice, originalStrategy, winRate } = params;
 
-const promptValidacaoInteligente = `
-Você é o Auditor de Riscos Quânticos e Diretor de Risco Sênior da Ex Nihilo.
-Sua missão é recalibrar os níveis de preço da estratégia fornecida para elevar a probabilidade estatística de acerto para PELO MENOS 80%.
+        const promptValidacaoInteligente = `
+Você é o Auditor e Otimizador de Riscos Quânticos do motor Phronesis.
+Sua missão é auditar a ordem esculpida no terminal e otimizá-la estatisticamente.
 
-DADOS ATUAIS DA ORDEM:
+DADOS DA OPERAÇÃO MONTADA NA BOLETA:
 - Ativo: ${symbol}
-- Preço Atual: R$ ${currentPrice}
-- Entrada Atual: R$ ${entryPrice}
-- Alvo Atual: R$ ${targetPrice}
-- Stop Loss Atual: R$ ${stopPrice}
-- Win Rate Atual: ${winRate}%
-- Tese de Contexto: "${originalStrategy}"
+- Preço de Mercado Atual: R$ ${currentPrice}
+- Ponto de Entrada Proposto: R$ ${entryPrice}
+- Alvo (Take Profit) Proposto: R$ ${targetPrice}
+- Stop Loss Proposto: R$ ${stopPrice}
+- Win Rate Estimado Atual: ${winRate}%
+- Tese Contextual: "${originalStrategy}"
 
-DIRETRIZ DE RECALIBRAGEM (FOCO 80%+ ACERTO):
-1. Avalie a assimetria e as zonas de exaustão teóricas do ativo.
-2. Proponha novos níveis de Entrada, Alvo e Stop que reduzam o risco de ruína e maximizem a probabilidade matemática para no mínimo 80%.
-3. Caso a operação seja estruturalmente inviável de atingir 80% devido à volatilidade extrema, classifique como INVIÁVEL e explique o motivo.
+DIRETRIZ DE ENGENHARIA E VALIDAÇÃO:
+1. Analise o Win Rate e a assimetria risco/retorno atual.
+2. Se a operação for favorável e com boa probabilidade: classifique como VIÁVEL e confirme ou ajuste levemente a estrutura.
+3. Se a operação tiver risco alto ou win rate insatisfatório, mas puder ser salva: RECALIBRE A ESTRUTURA! Forneça um NOVO ponto de entrada (ex: aguardar pullback), NOVO alvo e NOVO stop loss, ou sugira mudança tática (ex: reversão à média).
+4. Se mesmo ajustando a geometria o win rate continuar fraco e desfavorável: classifique como INVIÁVEL e recomende o descarte da operação ou troca de ativo.
 
-SAÍDA RIGOROSA (SEM ASTERISCOS):
+FORMATO RIGOROSO DE SAÍDA (RESPOSTA DIRETA SEM NEGRITO):
 
 ###VERDICT###
-[VIÁVEL, RISCO_ALTO ou INVIÁVEL]
+[VIÁVEL, AJUSTADO ou INVIÁVEL]
 
 ###VALIDATION_SUMMARY###
-[Explicação objetiva da recalibragem. Cite expressamente: 'Nova Entrada sugerida em R$ XX, Novo Alvo em R$ XX e Novo Stop em R$ XX (Probabilidade Projetada: XX%)']
+[Sua análise objetiva. Exemplo se ajustado: 'Operação recalibrada. Nova entrada sugerida em R$ XX.XX, Alvo em R$ XX.XX e Stop em R$ XX.XX (Winrate estimado elevado para XX%).']
 `;
 
         const resultado = await quantumQuery({
-            operation: "PHRONESIS_QUANTUM_ANALYSIS", // Usando o motor robusto direto
+            operation: "PHRONESIS_QUANTUM_ANALYSIS",
             params: { payloadRequestBody: { contents: [{ role: "user", parts: [{ text: promptValidacaoInteligente }] }] } }
         });
 
         if (!resultado.success) throw new Error(resultado.error);
 
-        const output = String(resultado.payload || "");
+        const output = String(resultado.payload || "").replace(/\*\*/g, "").trim();
 
-        const getMarcador = (marcador) => {
-            const regex = new RegExp(`###${marcador}###([\\s\\S]*?)(?=###|$)`, 'i');
-            const match = output.match(regex);
-            return match ? match[1].trim() : null;
+        // PARSER TOLERANTE A FALHAS (Extrai via Regex flexível ou linhas)
+        const extrairMarcador = (tag, texto) => {
+            const regex = new RegExp(`###${tag}###([\\s\\S]*?)(?=###|$)`, 'i');
+            const match = texto.match(regex);
+            if (match && match[1].trim()) return match[1].trim();
+
+            // Fallback: Procura por linhas do tipo "VERDICT: VIÁVEL"
+            const linha = texto.split('\n').find(l => l.toUpperCase().includes(tag.toUpperCase()));
+            if (linha) {
+                const partes = linha.split(':');
+                if (partes.length > 1) return partes.slice(1).join(':').trim();
+            }
+            return null;
         };
 
+        let veredito = extrairMarcador('VERDICT', output) || 'AJUSTADO';
+        let resumo = extrairMarcador('VALIDATION_SUMMARY', output) || output;
+
+        // Normalização do veredito
+        const upperVeredito = veredito.toUpperCase();
+        if (upperVeredito.includes('INVIÁVEL') || upperVeredito.includes('INVIAVEL')) {
+            veredito = 'INVIÁVEL';
+        } else if (upperVeredito.includes('VIÁVEL') || upperVeredito.includes('VIAVEL')) {
+            veredito = 'VIÁVEL';
+        } else {
+            veredito = 'AJUSTADO';
+        }
+
         const dadosValidados = {
-            verdict: (getMarcador('VERDICT') || 'AVALIANDO').toUpperCase(),
-            validationSummary: getMarcador('VALIDATION_SUMMARY') || 'Não foi possível extrair o sumário da validação.'
+            verdict: veredito,
+            validationSummary: resumo
         };
 
         // Grava o payload final purificado no banco temporário para o modal ler via Polling
@@ -740,7 +763,7 @@ SAÍDA RIGOROSA (SEM ASTERISCOS):
             })
             .where(eq(analysisRequests.id, jobId));
 
-        console.log(`🟢 [AUDITOR KAIZEN] Fila do Job #${jobId} atualizada com sucesso com contraproposta.`);
+        console.log(`🟢 [AUDITOR KAIZEN] Job #${jobId} concluído com sucesso com Veredito: ${veredito}`);
 
     } catch (error) {
         console.error("❌ FALHA NO PROCESSAMENTO DO AUDITOR KAIZEN:", error);
@@ -967,62 +990,70 @@ REGRA DE SAÍDA (OBRIGATÓRIA):
     }
 }
 
-// ──> ACTION 1: HOMOLOGAR ANÁLISE (TRANSFERE DE ANALYSIS PARA SIMULATIONS)
+// src/app/actions.js
+
+// ──> ACTION 1: HOMOLOGAR ANÁLISE (DEFENSIVA E RESILIENTE AO TEMPO)
 export async function salvarAnaliseEmSimulationsAction(jobId, dadosOrigem) {
     try {
-        if (!jobId) return { success: false, error: "ID da análise ausente." };
+        const userIdResolvido = Number(dadosOrigem.userId) || 1;
 
-        // 1. Busca o payload processado pela IA na tabela temporária (analysisRequests)
-        const [registroAnalysis] = await db.select()
-            .from(analysisRequests)
-            .where(eq(analysisRequests.id, Number(jobId)));
+        // 1. Tenta buscar no banco temporário se o jobId for numérico e válido
+        let payloadIA = {};
+        if (jobId && !String(jobId).startsWith("temp-")) {
+            try {
+                const [registroAnalysis] = await db.select()
+                    .from(analysisRequests)
+                    .where(eq(analysisRequests.id, Number(jobId)));
 
-        if (!registroAnalysis || !registroAnalysis.aiSummary) {
-            throw new Error("Dados da análise temporária não encontrados.");
+                if (registroAnalysis && registroAnalysis.aiSummary) {
+                    payloadIA = typeof registroAnalysis.aiSummary === 'string'
+                        ? JSON.parse(registroAnalysis.aiSummary)
+                        : registroAnalysis.aiSummary;
+                    
+                    // Limpa a fila temporária após resgatar
+                    await db.delete(analysisRequests).where(eq(analysisRequests.id, Number(jobId)));
+                }
+            } catch (errDb) {
+                console.warn("⚠️ Registro temporário não localizado. Usando payload direto do modal:", errDb);
+            }
         }
 
-        // 2. Faz o parse do JSON contendo os dados extraídos do Phronesis
-        const payloadIA = JSON.parse(registroAnalysis.aiSummary);
+        console.log("📝 [SERVER ACTION] SALVANDO OPERAÇÃO NO TERMINAL...");
 
-        console.log("📝 [SERVER ACTION] FAZENDO PARSE PARA NOVO REGISTRO:", payloadIA);
-
-        // 3. INSERE OFICIALMENTE (db.insert) no histórico definitivo da mesa
+        // 2. INSERÇÃO DEFINITIVA (Prioriza os dados que estão visíveis na tela do operador)
         const [novaSimulacao] = await db.insert(simulations).values({
-            userId: registroAnalysis.userId || dadosOrigem.userId || 1,
-            tipoOperacao: dadosOrigem.tipoOperacao,
-            segmento: dadosOrigem.segmento,
-            ativo1: registroAnalysis.assetCode || dadosOrigem.ativo1,
+            userId: userIdResolvido,
+            tipoOperacao: dadosOrigem.tipoOperacao || "Day Trade",
+            segmento: dadosOrigem.segmento || "Ações",
+            ativo1: dadosOrigem.ativo1 || "ATIVO",
             ativo2: dadosOrigem.ativo2 || null,
-            investimento: dadosOrigem.investimento,
-            alavancagem: dadosOrigem.alavancagem,
-            prazoValor: dadosOrigem.prazoValor,
-            prazoUnidade: dadosOrigem.prazoUnidade,
+            investimento: dadosOrigem.investimento || "0,00",
+            alavancagem: dadosOrigem.alavancagem || "1x",
+            prazoValor: dadosOrigem.prazoValor || "1",
+            prazoUnidade: dadosOrigem.prazoUnidade || "Dias",
             
             // Dados de preços reativos vindos da tela do operador
-            entryPrice: dadosOrigem.entryPrice,
-            targetPrice: dadosOrigem.targetPrice,
-            stopPrice: dadosOrigem.stopPrice,
-            marketPriceAtAnalysis: dadosOrigem.marketPriceAtAnalysis,
+            entryPrice: String(dadosOrigem.entryPrice || "0"),
+            targetPrice: String(dadosOrigem.targetPrice || "0"),
+            stopPrice: String(dadosOrigem.stopPrice || "0"),
+            marketPriceAtAnalysis: String(dadosOrigem.marketPriceAtAnalysis || dadosOrigem.entryPrice || "0"),
 
-            // Sincroniza métricas e textos estruturados da IA
-            winRate: dadosOrigem.winRate || payloadIA.temperaturaSaude,
-            technicalSummary: payloadIA.parecerTecnico || dadosOrigem.technicalSummary,
-            strategy: payloadIA.estrategia || dadosOrigem.strategy,
+            // Sincroniza métricas e textos da tela
+            winRate: String(dadosOrigem.winRate || "0"),
+            technicalSummary: dadosOrigem.technicalSummary || payloadIA.technicalSummary || "Análise concluída.",
+            strategy: dadosOrigem.strategy || payloadIA.strategy || "Estratégia salva no terminal.",
             
             // Grava os percentuais e valores nominais reativos das projeções
-            stopPercent: dadosOrigem.stopPercent,
-            alvoPercent: dadosOrigem.alvoPercent,
-            projectedGainAmount: dadosOrigem.projectedGainAmount,
-            projectedLossAmount: dadosOrigem.projectedLossAmount,
+            stopPercent: String(dadosOrigem.stopPercent || "0"),
+            alvoPercent: String(dadosOrigem.alvoPercent || "0"),
+            projectedGainAmount: String(dadosOrigem.projectedGainAmount || "0"),
+            projectedLossAmount: String(dadosOrigem.projectedLossAmount || "0"),
             
             // Nasce como confirmado definitivo para o histórico
             status: "confirmed" 
         }).returning({ id: simulations.id });
 
-        // 4. Limpeza Compulsória: Remove a linha da fila temporária
-        await db.delete(analysisRequests).where(eq(analysisRequests.id, Number(jobId)));
-
-        console.log(`💾 [FLUXO FINALIZADO] Registro definitivo criado com sucesso em Simulations ID #${novaSimulacao.id}`);
+        console.log(`💾 [FLUXO FINALIZADO] Registro definitivo criado em Simulations ID #${novaSimulacao.id}`);
         return { success: true, simulationId: novaSimulacao.id };
 
     } catch (error) {
@@ -1087,33 +1118,76 @@ export async function dispararAnaliseAssincrona(userId, assetCode, filesData, cu
 
 async function processarAnaliseEmBackground(jobId, assetCode, filesData, customDirective, dadosOperacao, considerarEstrategista = false) {
     try {
-        console.log(`💡 [BACKGROUND ANALYST STATION] Rodando Job #${jobId} para ${assetCode}...`);
+        console.log(`💡 [BACKGROUND ANALYST STATION] Processando Análise Fundamentalista Job #${jobId} para ${assetCode}...`);
         
-        const simboloAtivo = assetCode || dadosOperacao?.symbol || "ATIVO";
-        const tipoOp = dadosOperacao?.tipoOperacao || "Análise Fundamentalista";
+        const simboloAtivo = (assetCode || "ATIVO").toUpperCase();
 
-        // 1. PASSO 1: RASTREADOR MACRO E WEB
-        const resMacro = await rastrearCenarioMacroAction(simboloAtivo, tipoOp);
-        if (!resMacro || !resMacro.success) {
-            throw new Error("Falha no rastreador macro.");
-        }
+        // PROMPT COM AS CHAVES EXATAS DO DASHBOARD MODAL
+        const promptFundamentalista = `
+Você é o Analista Fundamentalista Sênior do motor Phronesis.
+Sua missão é acelerar o estudo do ativo ${simboloAtivo} fornecendo uma radiografia executiva sintetizada.
 
-        // 2. PASSO 2: ENGENHARIA DE OPERAÇÃO/ANÁLISE
-        const cargaDados = {
-            userId: dadosOperacao?.userId || 1,
-            symbol: simboloAtivo,
-            tipoOperacao: tipoOp,
-            customDirective: customDirective || ""
+ATIVO EM ESTUDO: ${simboloAtivo}
+DIRETRIZ CUSTOMIZADA: "${customDirective || "Análise fundamentalista completa focando em valor, dividendos e riscos."}"
+
+DIRETRIZ DE CONCISÃO: 
+Seja direto e objetivo. Escreva resumos densos porém concisos de no máximo 2 parágrafos curtos por bloco para não estourar o layout da mesa.
+
+REGRA DE SAÍDA (OBRIGATÓRIA):
+
+###RESUMO###
+[Visão executiva do ativo e tese principal]
+
+###ESTRATEGIA###
+[Posicionamento recomendado, dividendos e diferenciais]
+
+###PERFORMANCE###
+[Métricas de desempenho recente, DPA, cotação e múltiplos atuais]
+
+###PROJECAO###
+[Projeção de curto prazo e catalisadores de valorização]
+
+###VISAO_SETORIAL_5ANOS###
+[Tendência do setor do ativo para os próximos 5 anos]
+
+###RISCOS###
+[Principais vulnerabilidades, concorrência e riscos macro/fiscais]
+
+###ACAO_SUGERIDA###
+[COMPRA, MANTER, AGUARDAR ou VENDA]
+
+###TEMPERATURA_SAUDE###
+[Valor numérico de 0 a 100 indicando a nota de saúde do ativo]
+`;
+
+        const resultado = await quantumQuery({
+            operation: "PHRONESIS_QUANTUM_ANALYSIS",
+            params: { payloadRequestBody: { contents: [{ role: "user", parts: [{ text: promptFundamentalista }] }] } }
+        });
+
+        if (!resultado.success) throw new Error(resultado.error);
+
+        const output = String(resultado.payload || "").replace(/\*\*/g, "").trim();
+
+        const extrairBloco = (marcador) => {
+            const regex = new RegExp(`###${marcador}###([\\s\\S]*?)(?=###|$)`, 'i');
+            const match = output.match(regex);
+            return match ? match[1].trim() : "Informação indisponível.";
         };
 
-        const resQuant = await gerarEngenhariaOperacaoAction(cargaDados, resMacro.cenarioMacro);
-        if (!resQuant || !resQuant.success) {
-            throw new Error("Falha no processamento quantitativo.");
-        }
+        // MONTA O PAYLOAD 100% ALINHADO COM O DASHBOARD MODAL
+        const payloadIA = {
+            resumo: extrairBloco('RESUMO'),
+            estrategia: extrairBloco('ESTRATEGIA'),
+            performance: extrairBloco('PERFORMANCE'),
+            projecao: extrairBloco('PROJECAO'),
+            visaoSetorial5Anos: extrairBloco('VISAO_SETORIAL_5ANOS'),
+            riscos: extrairBloco('RISCOS'),
+            acaoSugerida: extrairBloco('ACAO_SUGERIDA'),
+            temperaturaSaude: extrairBloco('TEMPERATURA_SAUDE')
+        };
 
-        // 3. PERSISTÊNCIA NA TABELA PARA O POLLING DO ANALYST STATION
-        const payloadIA = resQuant.payload;
-
+        // PERSISTÊNCIA NA TABELA ANÁLYSIS_REQUESTS (PERMANENTE NO HISTÓRICO)
         await db.update(analysisRequests)
             .set({ 
                 aiSummary: JSON.stringify(payloadIA), 
@@ -1121,10 +1195,10 @@ async function processarAnaliseEmBackground(jobId, assetCode, filesData, customD
             })
             .where(eq(analysisRequests.id, jobId));
             
-        console.log(`💾 [ANALYSIS_REQUESTS] Job #${jobId} concluído com sucesso para o Analyst Station.`);
+        console.log(`💾 [ANALYSIS_REQUESTS] Análise fundamentalista de ${simboloAtivo} (Job #${jobId}) gravada com sucesso no Neon DB.`);
 
     } catch (err) {
-        console.error("❌ Erro no processamento em background:", err);
+        console.error("❌ Erro no processamento fundamentalista em background:", err);
         try {
             await db.update(analysisRequests)
                 .set({ status: 'ERROR' })

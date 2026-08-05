@@ -10,7 +10,8 @@ import {
     iniciarValidacaoEstrategiaAction, 
     verificarStatusAnalisePorId, 
     calcularProjecoesAction, 
-    salvarAnaliseEmSimulationsAction 
+    salvarAnaliseEmSimulationsAction,
+    descartarAnaliseTemporariaAction 
 } from '@/app/actions'; 
 
 export default function StrategyModal({ isOpen, onClose, data, user }) {
@@ -280,7 +281,7 @@ const handleValidarPlano = async () => {
     const userIdResolvido = user?.id || data?.userId;
 
     if (!userIdResolvido) {
-        alert(`Erro de Sessão: Validação abortada.`);
+        alert(`Erro de Sessão: ID do usuário não identificado.`);
         setIsValidating(false);
         return;
     }
@@ -293,9 +294,9 @@ const handleValidarPlano = async () => {
         let completou = false;
         let tentativas = 0;
 
-        // Loop leve de aguardo para a resposta do botão
-        while (!completou && tentativas < 10) {
-            await new Promise(r => setTimeout(r, 1500));
+        // Polling de 2s em 2s (até 15 tentativas = 30s)
+        while (!completou && tentativas < 15) {
+            await new Promise(r => setTimeout(r, 2000));
             const statusResponse = await verificarStatusAnalisePorId(validationJobId);
 
             if (statusResponse && statusResponse.status === 'COMPLETED') {
@@ -305,8 +306,8 @@ const handleValidarPlano = async () => {
 
                 if (payloadCru) {
                     setValidationResult({
-                        verdict: payloadCru.verdict || 'AVALIANDO',
-                        summary: payloadCru.validationSummary || 'Nova calibragem aplicada.'
+                        verdict: payloadCru.verdict || 'AJUSTADO',
+                        summary: payloadCru.validationSummary || 'Validação concluída.'
                     });
                 }
                 completou = true;
@@ -315,6 +316,11 @@ const handleValidarPlano = async () => {
             }
             tentativas++;
         }
+
+        if (!completou) {
+            throw new Error("O servidor demorou para responder. Tente novamente.");
+        }
+
     } catch (error) {
         console.error("🔴 Erro na validação manual do plano:", error);
         alert(`Erro operacional: ${error.message}`);
@@ -323,9 +329,25 @@ const handleValidarPlano = async () => {
     }
 };
 
+// Função de fechamento com descarte do rascunho temporário
+const handleCloseModal = async () => {
+    if (isSaving) return;
+
+    // Se houver um jobId de rascunho e a operação NÃO foi salva em simulations, limpa a fila
+    if (data?.jobId && !isSaving) {
+        try {
+            await descartarAnaliseTemporariaAction(data.jobId);
+        } catch (err) {
+            console.warn("⚠️ Não foi possível descartar a análise temporária ao fechar:", err);
+        }
+    }
+
+    onClose();
+};
+
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 overflow-hidden">
-            <div className="absolute inset-0 bg-[#05070a]/90 backdrop-blur-xl" onClick={isSaving || status === 'loading' ? null : onClose}></div>
+            <div className="absolute inset-0 bg-[#05070a]/90 backdrop-blur-xl" onClick={isSaving || status === 'loading' ? null : handleCloseModal}></div>
             
             <Card className={`relative w-full ${isExpanded ? 'max-w-5xl' : 'max-w-2xl'} bg-[#090b11] border-white/5 shadow-2xl transition-all duration-300 p-8 max-h-[90vh] overflow-y-auto rounded-[32px] custom-scrollbar`}>
                 
@@ -333,9 +355,9 @@ const handleValidarPlano = async () => {
                     <button onClick={() => setIsExpanded(!isExpanded)} className="p-2 text-slate-500 hover:text-white bg-white/5 rounded-full">
                         {isExpanded ? <ChevronLeft size={18} /> : <ChevronRight size={18} />}
                     </button>
-                    <button onClick={onClose} disabled={isSaving || status === 'loading'} className="p-2 text-slate-500 hover:text-white bg-white/5 rounded-full disabled:opacity-30">
-                        <X size={18} />
-                    </button>
+                    <button onClick={handleCloseModal} disabled={isSaving || status === 'loading'} className="p-2 text-slate-500 hover:text-white bg-white/5 rounded-full disabled:opacity-30">
+    <X size={18} />
+</button>
                 </div>
 
                 <div className="text-left mb-6">
@@ -621,10 +643,10 @@ const handleValidarPlano = async () => {
                 )}
                 
                 <div className="flex flex-col sm:flex-row items-center gap-4 mt-8">
-                    <Button onClick={onClose} disabled={isSaving || status === 'loading'} className="w-full sm:w-auto px-6 py-4 rounded-[18px] bg-white/5 text-slate-300 flex items-center justify-center gap-2 text-xs font-black uppercase tracking-widest disabled:opacity-30">
-                        <ArrowLeft size={16} />
-                        Editar Ordem
-                    </Button>
+                    <Button onClick={handleCloseModal} disabled={isSaving || status === 'loading'} className="w-full sm:w-auto px-6 py-4 rounded-[18px] bg-white/5 text-slate-300 flex items-center justify-center gap-2 text-xs font-black uppercase tracking-widest disabled:opacity-30">
+    <ArrowLeft size={16} />
+    Editar Ordem
+</Button>
 
                     <Button onClick={handleConfirmOperation} disabled={isSaving || status !== 'ready'} className="flex-1 w-full py-4 rounded-[18px] bg-blue-600 hover:bg-blue-500 flex items-center justify-center gap-3 transition-all disabled:bg-blue-800/40 disabled:text-white/30 disabled:cursor-not-allowed">
                         {isSaving ? <RefreshCw size={18} className="animate-spin" /> : <Save size={18} />}
