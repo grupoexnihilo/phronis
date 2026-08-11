@@ -352,44 +352,68 @@ export default function SimulationsView({ user }) {
                 </div>
             )}
 
-            {/* POPUP DE DETALHAMENTO DA IA */}
-            {selectedAiData && (
-                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-[#05070a]/90 backdrop-blur-xl animate-in fade-in duration-200">
-                    <div className="relative w-full max-w-2xl bg-[#090b11] border border-white/5 p-8 rounded-[32px] shadow-2xl max-h-[85vh] overflow-y-auto custom-scrollbar">
-                        <button 
-                            onClick={() => setSelectedAiData(null)}
-                            className="absolute top-6 right-6 p-2 text-slate-500 hover:text-white bg-white/5 hover:bg-white/10 rounded-full transition-all"
-                        >
-                            <X size={18} />
-                        </button>
+            {/* POPUP DE DETALHAMENTO DA IA COM GEOMETRIA COMPLETA DA ORDEM */}
+{selectedAiData && (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-[#05070a]/90 backdrop-blur-xl animate-in fade-in duration-200">
+        <div className="relative w-full max-w-2xl bg-[#090b11] border border-white/5 p-8 rounded-[32px] shadow-2xl max-h-[85vh] overflow-y-auto custom-scrollbar">
+            <button 
+                onClick={() => setSelectedAiData(null)}
+                className="absolute top-6 right-6 p-2 text-slate-500 hover:text-white bg-white/5 hover:bg-white/10 rounded-full transition-all"
+            >
+                <X size={18} />
+            </button>
 
-                        <div className="flex items-center gap-3 mb-6">
-                            <BrainCircuit className="text-blue-500" size={24} />
-                            <h3 className="text-xl font-black text-white uppercase italic tracking-tight">Parecer Completo da Inteligência</h3>
-                        </div>
+            <div className="flex items-center gap-3 mb-6">
+                <BrainCircuit className="text-blue-500" size={24} />
+                <h3 className="text-xl font-black text-white uppercase italic tracking-tight">
+                    Detalhamento do Cenário • {selectedAiData.ativo1 || selectedAiData.ativo_1}
+                </h3>
+            </div>
 
-                        <div className="space-y-6">
-                            <div className="p-5 bg-blue-600/5 border border-blue-500/10 rounded-2xl">
-                                <p className="text-[10px] text-blue-400 font-black uppercase tracking-widest mb-2">Estratégia Recomendada</p>
-                                <p className="text-sm text-slate-200 leading-relaxed font-medium italic">
-                                    "{selectedAiData.strategy || "Nenhuma especificação estratégica gravada."}"
-                                </p>
-                            </div>
+            {/* CARDS DE PREÇOS NO MODAL */}
+<div className="grid grid-cols-3 gap-3 mb-6 text-center">
+    <div className="p-4 bg-blue-500/5 border border-blue-500/20 rounded-2xl">
+        <span className="text-[9px] text-blue-400 font-black uppercase tracking-wider block mb-1">Entrada</span>
+        <span className="text-base font-mono font-bold text-white">
+            R$ {selectedAiData.entryPrice || selectedAiData.entry_price || '--'}
+        </span>
+    </div>
+    <div className="p-4 bg-emerald-500/5 border border-emerald-500/20 rounded-2xl">
+        <span className="text-[9px] text-emerald-400 font-black uppercase tracking-wider block mb-1">Alvo (Saída)</span>
+        <span className="text-base font-mono font-bold text-emerald-400">
+            R$ {selectedAiData.targetPrice || selectedAiData.target_price || '--'}
+        </span>
+    </div>
+    <div className="p-4 bg-red-500/5 border border-red-500/20 rounded-2xl">
+        <span className="text-[9px] text-red-400 font-black uppercase tracking-wider block mb-1">Stop Loss</span>
+        <span className="text-base font-mono font-bold text-red-400">
+            R$ {selectedAiData.stopPrice || selectedAiData.stop_price || '--'}
+        </span>
+    </div>
+</div>
 
-                            <div className="p-5 bg-slate-900 border border-white/5 rounded-2xl">
-                                <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest mb-2">Resumo Técnico & Insights Adicionais</p>
-                                <p className="text-sm text-slate-300 leading-relaxed font-medium">
-                                    {selectedAiData.technicalSummary || selectedAiData.technical_summary || "Cenário verificado com os parâmetros padrões do terminal."}
-                                </p>
-                            </div>
-                        </div>
-
-                        <p className="text-[9px] text-slate-600 text-center uppercase tracking-widest font-black mt-8">
-                            Pressione <span className="text-slate-400">ESC</span> ou clique no X para fechar este relatório
-                        </p>
-                    </div>
+            <div className="space-y-4">
+                <div className="p-5 bg-blue-600/5 border border-blue-500/10 rounded-2xl">
+                    <p className="text-[10px] text-blue-400 font-black uppercase tracking-widest mb-2">Estratégia Recomendada</p>
+                    <p className="text-sm text-slate-200 leading-relaxed font-medium italic">
+                        "{selectedAiData.strategy || "Nenhuma especificação estratégica gravada."}"
+                    </p>
                 </div>
-            )}
+
+                <div className="p-5 bg-slate-900 border border-white/5 rounded-2xl">
+                    <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest mb-2">Parecer Técnico & Auditoria de Risco</p>
+                    <p className="text-sm text-slate-300 leading-relaxed font-medium">
+                        {selectedAiData.technicalSummary || selectedAiData.technical_summary || "Cenário verificado com os parâmetros padrões do terminal."}
+                    </p>
+                </div>
+            </div>
+
+            <p className="text-[9px] text-slate-600 text-center uppercase tracking-widest font-black mt-8">
+                Pressione <span className="text-slate-400">ESC</span> ou clique no X para fechar este relatório
+            </p>
+        </div>
+    </div>
+)}
         </div>
     );
 }
