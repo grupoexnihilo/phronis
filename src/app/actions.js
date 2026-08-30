@@ -992,36 +992,37 @@ REGRA DE SAÍDA (OBRIGATÓRIA):
 
 // src/app/actions.js
 
-// ──> ACTION 1: HOMOLOGAR ANÁLISE (DEFENSIVA E RESILIENTE AO TEMPO)
+// ──> ACTION 1: HOMOLOGAR ANÁLISE (ATUALIZA O RASCUNHO OU CRIA SE NÃO EXISTIR)
 export async function salvarAnaliseEmSimulationsAction(jobId, dadosOrigem) {
     try {
         const userIdResolvido = Number(dadosOrigem.userId) || 1;
+        const numericJobId = Number(jobId);
+        const ehIdValido = numericJobId && !isNaN(numericJobId) && !String(jobId).startsWith("temp-");
 
-        // 1. Tenta buscar no banco temporário se o jobId for numérico e válido
         let payloadIA = {};
-        if (jobId && !String(jobId).startsWith("temp-")) {
+
+        // 1. Tenta resgatar payload temporário se houver solicitação na tabela analysisRequests
+        if (ehIdValido) {
             try {
                 const [registroAnalysis] = await db.select()
                     .from(analysisRequests)
-                    .where(eq(analysisRequests.id, Number(jobId)));
+                    .where(eq(analysisRequests.id, numericJobId));
 
                 if (registroAnalysis && registroAnalysis.aiSummary) {
                     payloadIA = typeof registroAnalysis.aiSummary === 'string'
                         ? JSON.parse(registroAnalysis.aiSummary)
                         : registroAnalysis.aiSummary;
                     
-                    // Limpa a fila temporária após resgatar
-                    await db.delete(analysisRequests).where(eq(analysisRequests.id, Number(jobId)));
+                    await db.delete(analysisRequests).where(eq(analysisRequests.id, numericJobId));
                 }
             } catch (errDb) {
-                console.warn("⚠️ Registro temporário não localizado. Usando payload direto do modal:", errDb);
+                console.warn("⚠️ Registro de análise temporária não localizado, prosseguindo:", errDb);
             }
         }
 
-        console.log("📝 [SERVER ACTION] SALVANDO OPERAÇÃO NO TERMINAL...");
+        console.log("📝 [SERVER ACTION] CONSOLIDANDO OPERAÇÃO NO TERMINAL...");
 
-        // 2. INSERÇÃO DEFINITIVA (Prioriza os dados que estão visíveis na tela do operador)
-        const [novaSimulacao] = await db.insert(simulations).values({
+        const dadosParaAtualizarOuInserir = {
             userId: userIdResolvido,
             tipoOperacao: dadosOrigem.tipoOperacao || "Day Trade",
             segmento: dadosOrigem.segmento || "Ações",
@@ -1029,48 +1030,74 @@ export async function salvarAnaliseEmSimulationsAction(jobId, dadosOrigem) {
             ativo2: dadosOrigem.ativo2 || null,
             investimento: dadosOrigem.investimento || "0,00",
             alavancagem: dadosOrigem.alavancagem || "1x",
-            prazoValor: dadosOrigem.prazoValor || "1",
+            prazoValor: String(dadosOrigem.prazoValor || "1"),
             prazoUnidade: dadosOrigem.prazoUnidade || "Dias",
             
-            // Dados de preços reativos vindos da tela do operador
             entryPrice: String(dadosOrigem.entryPrice || "0"),
             targetPrice: String(dadosOrigem.targetPrice || "0"),
             stopPrice: String(dadosOrigem.stopPrice || "0"),
             marketPriceAtAnalysis: String(dadosOrigem.marketPriceAtAnalysis || dadosOrigem.entryPrice || "0"),
 
-            // Sincroniza métricas e textos da tela
             winRate: String(dadosOrigem.winRate || "0"),
             technicalSummary: dadosOrigem.technicalSummary || payloadIA.technicalSummary || "Análise concluída.",
             strategy: dadosOrigem.strategy || payloadIA.strategy || "Estratégia salva no terminal.",
             
-            // Grava os percentuais e valores nominais reativos das projeções
             stopPercent: String(dadosOrigem.stopPercent || "0"),
             alvoPercent: String(dadosOrigem.alvoPercent || "0"),
             projectedGainAmount: String(dadosOrigem.projectedGainAmount || "0"),
             projectedLossAmount: String(dadosOrigem.projectedLossAmount || "0"),
             
-            // Nasce como confirmado definitivo para o histórico
-            status: "confirmed" 
-        }).returning({ id: simulations.id });
+            status: "confirmed", // Promove de rascunho (draft) para confirmado
+            updatedAt: new Date()
+        };
 
-        console.log(`💾 [FLUXO FINALIZADO] Registro definitivo criado em Simulations ID #${novaSimulacao.id}`);
+        let simulationId = numericJobId;
+
+        // 2. Se a simulação de rascunho já existir no banco, faz UPDATE
+        if (ehIdValido) {
+            const [registroExistente] = await db.select()
+                .from(simulations)
+                .where(eq(simulations.id, numericJobId));
+
+            if (registroExistente) {
+                await db.update(simulations)
+                    .set(dadosParaAtualizarOuInserir)
+                    .where(eq(simulations.id, numericJobId));
+
+                console.log(`🔄 [FLUXO FINALIZADO] Rascunho ID #${numericJobId} atualizado para confirmed.`);
+                return { success: true, simulationId: numericJobId };
+            }
+        }
+
+        // 3. Fallback: Se não houver rascunho prévio no banco, faz INSERÇÃO NOVAL
+        const [novaSimulacao] = await db.insert(simulations)
+            .values(dadosParaAtualizarOuInserir)
+            .returning({ id: simulations.id });
+
+        console.log(`💾 [FLUXO FINALIZADO] Nova simulação criada com ID #${novaSimulacao.id}`);
         return { success: true, simulationId: novaSimulacao.id };
 
     } catch (error) {
-        console.error("❌ Erro ao criar registro definitivo na tabela simulations:", error);
+        console.error("❌ Erro ao consolidar registro na tabela simulations:", error);
         return { success: false, error: error.message };
     }
 }
 
-// ──> ACTION 2: DESCARTAR ANÁLISE (LIMPA A TABELA SEM SALVAR)
+// src/app/actions.js
+
+// ──> ACTION 2: DESCARTAR ANÁLISE TEMPORÁRIA / RASCUNHO (LIMPA A TABELA SIMULATIONS E ANALYSIS_REQUESTS)
 export async function descartarAnaliseTemporariaAction(jobId) {
     try {
-        if (!jobId) return { success: true }; // Retorno silencioso se não houver ID válido
+        const numericId = Number(jobId);
+        if (!numericId || isNaN(numericId)) return { success: true };
 
-        // Deleta o registro temporário limpando o rastro no banco
-        await db.delete(analysisRequests).where(eq(analysisRequests.id, Number(jobId)));
+        // Limpa da tabela de simulações (rascunho)
+        await db.delete(simulations).where(and(eq(simulations.id, numericId), eq(simulations.status, 'draft')));
+
+        // Limpa também da tabela de requisições temporárias se existir
+        await db.delete(analysisRequests).where(eq(analysisRequests.id, numericId));
         
-        console.log(`🗑️ [DESCARTE KAIZEN] Registro temporário da análise #${jobId} limpo com sucesso.`);
+        console.log(`🗑️ [DESCARTE KAIZEN] Rascunho #${numericId} removido do banco com sucesso.`);
         return { success: true };
     } catch (error) {
         console.error("❌ Erro ao descartar análise temporária:", error);

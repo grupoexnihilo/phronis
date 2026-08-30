@@ -293,6 +293,8 @@ const handleGerarOperacao = async () => {
                             <option value="Day Trade">Day Trade</option>
                             <option value="Swing Trade">Swing Trade</option>
                             <option value="Long & Short">Long & Short</option>
+                            <option value="Position">Position</option>
+                            <option value="Arbitragem">Arbitragem</option>
                         </select>
                     </div>
 
