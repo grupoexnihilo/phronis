@@ -159,7 +159,7 @@ return (
           <option value="1:50" className="bg-slate-950 text-white">1:50</option>
           <option value="1:100" className="bg-slate-950 text-white">1:100</option>
           <option value="1:200" className="bg-slate-950 text-white">1:200</option>
-          <option value="1:500" className="bg-slate-950 text-white text-orange-500">1:500 (High Leverage)</option>
+          <option value="1:500" className="bg-slate-950 text-white">1:500 (High Leverage)</option>
         </>
       ) : (
         /* LISTA TRADICIONAL B3/NYSE: Só renderiza se for Day Trade */
@@ -169,7 +169,7 @@ return (
           <option value="10x" className="bg-slate-950 text-white">10x</option>
           <option value="20x" className="bg-slate-950 text-white">20x</option>
           <option value="50x" className="bg-slate-950 text-white">50x</option>
-          <option value="100x" className="bg-slate-950 text-white text-orange-500">100x (High Risk)</option>
+          <option value="100x" className="bg-slate-950 text-white">100x (High Risk)</option>
            </>
            )}
            </select>
