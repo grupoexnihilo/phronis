@@ -1,17 +1,20 @@
-// services/simulationService.js
+// src/services/simulationService.js
 import { db } from '../db/db';
 import { simulations } from '../db/schema';
-import { eq, desc } from 'drizzle-orm'; // <-- Importado o 'desc' aqui para o orderBY funcionar
+import { eq, desc } from 'drizzle-orm';
 
 export const simulationService = {
   
-  // 1. GET ALL: Busca todas as simulações para listar na SimulationsView
-  async getAll() {
+  // 1. GET ALL: Busca apenas as simulações do usuário logado
+  async getAll(userId) {
     try {
+      if (!userId) return [];
+
       return await db
         .select()
         .from(simulations)
-        .orderBy(desc(simulations.createdAt)); // Traz as mais recentes primeiro
+        .where(eq(simulations.userId, Number(userId))) // 🛡️ FILTRO MULTI-TENANT POR USUÁRIO
+        .orderBy(desc(simulations.createdAt));
     } catch (error) {
       console.error("Erro no service getAll:", error);
       throw error;

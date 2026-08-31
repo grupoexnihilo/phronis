@@ -268,11 +268,17 @@ import { simulationService } from '../services/simulationService';
 
 export async function getSimulationsFromDB(userId) {
   try {
-    // Busca todas as simulações do serviço
-    const data = await simulationService.getAll();
-    return data; 
+    const numericUserId = Number(userId);
+    if (!numericUserId || isNaN(numericUserId)) {
+      console.warn("⚠️ [SECURITY] Tentativa de buscar simulações sem um userId válido.");
+      return [];
+    }
+
+    // Passa o ID estritamente verificado para a consulta
+    const data = await simulationService.getAll(numericUserId);
+    return JSON.parse(JSON.stringify(data)); 
   } catch (error) {
-    console.error("❌ Erro ao buscar simulações:", error);
+    console.error("❌ Erro ao buscar simulações por usuário:", error);
     return [];
   }
 }
