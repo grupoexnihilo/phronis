@@ -11,3 +11,13 @@ export default function RootLayout({ children }) {
     </html>
   );
 }
+
+export const metadata = {
+  title: 'Phronis Terminal • Engenharia de Operações',
+  description: 'Sistema de Análise Preditiva e Gestão de Operações',
+  icons: {
+    icon: '/avatar.png',
+    shortcut: '/avatar.png',
+    apple: '/avatar.png',
+  },
+};
